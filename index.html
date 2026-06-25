@@ -26,6 +26,8 @@ textarea{min-height:64px;resize:vertical}
 #cur{width:108px;border:1px solid var(--line);border-radius:10px;text-align:center;text-align-last:center;font-size:20px;font-weight:700;color:var(--navy);background:#f7f9fc;padding:0 8px;-webkit-appearance:menulist;appearance:menulist}
 .fx{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:6px}
 .fxest{margin-top:10px;font-size:16px;font-weight:700;color:var(--navy)}
+.mini{font-size:11px;font-weight:700;color:var(--navy);background:#eef3f8;border:1px solid var(--line);border-radius:8px;padding:3px 8px;margin-left:8px;text-transform:none;letter-spacing:0;vertical-align:middle}
+.ratenote{margin-top:6px;font-size:12px;color:var(--grey)}
 .flag{display:none;background:#fff4e5;border:1px solid #f0c074;color:#9a5b00;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin-top:10px}
 .badge{display:inline-block;background:#fff4e5;border:1px solid #f0c074;color:#9a5b00;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -82,8 +84,9 @@ textarea{min-height:64px;resize:vertical}
       </select>
     </div>
     <div class="fx" id="fx">
-      <label>Conversion rate — 1 <span id="curlbl">USD</span> = ? USD</label>
+      <label>Conversion rate — 1 <span id="curlbl">USD</span> = ? USD <button type="button" id="getRate" class="mini">↻ auto-fill</button></label>
       <input id="rate" type="number" inputmode="decimal" placeholder="e.g. 1.08">
+      <div class="ratenote" id="rateNote"></div>
       <div class="fxest" id="fxest"></div>
       <label>Actual USD (from bank statement) — fill in when you reconcile</label>
       <input id="actual" type="number" inputmode="decimal" placeholder="leave blank until you reconcile">
@@ -169,6 +172,34 @@ function syncFx(){
   $("fxest").textContent=s;
   $("flag").style.display=(!usd && est>0 && !(act>0))?"block":"none";
 }
+// ---- live FX rates (free, no key: open.er-api.com). Cached so it works briefly offline. ----
+var FXKEY="expcap_fx";
+function loadFx(){try{return JSON.parse(localStorage.getItem(FXKEY))||null}catch(e){return null}}
+function getRates(force){
+  var c=loadFx();
+  if(c&&c.rates&&!force&&(Date.now()-c.ts<12*3600*1000))return Promise.resolve(c);
+  return fetch("https://open.er-api.com/v6/latest/USD",{cache:"no-store"})
+    .then(function(r){return r.json()})
+    .then(function(j){
+      if(j&&j.result==="success"&&j.rates){var obj={ts:Date.now(),updated:j.time_last_update_utc||"",rates:j.rates};localStorage.setItem(FXKEY,JSON.stringify(obj));return obj}
+      return c||null;
+    })
+    .catch(function(){return c||null});
+}
+function autoRate(force){
+  if(isUSD())return;
+  var cur=curUp();
+  $("rateNote").textContent="Looking up rate…";
+  return getRates(force).then(function(fx){
+    if(!fx||!fx.rates||!fx.rates[cur]){$("rateNote").textContent="Couldn't fetch rate (offline?) — enter it manually.";return}
+    var usdPer=Number((1/fx.rates[cur]).toPrecision(6));
+    $("rate").value=usdPer;
+    var when=fx.updated?fx.updated.replace(" +0000","").replace(/^[A-Za-z]{3}, /,""):"";
+    var stale=(Date.now()-fx.ts>12*3600*1000)?" [cached]":"";
+    $("rateNote").textContent="Auto-filled: 1 "+cur+" ≈ $"+usdPer+(when?(" · rate of "+when):"")+stale+". Adjust if needed; actual USD comes from your statement.";
+    syncFx();
+  });
+}
 // USD value an entry contributes to the report: actual if present, else estimate
 function usdOf(e){
   if(e.actualUSD>0) return Number(e.actualUSD);
@@ -192,9 +223,10 @@ var paidEl=$("paid"),selPaid="Cash";
 var curSel=$("cur");
 curSel.addEventListener("focus",function(){setLabels(true)});
 curSel.addEventListener("mousedown",function(){setLabels(true)});
-curSel.addEventListener("change",function(){setLabels(false);localStorage.setItem("expcap_cur",curUp());syncFx()});
+curSel.addEventListener("change",function(){setLabels(false);localStorage.setItem("expcap_cur",curUp());syncFx();if(!isUSD()&&!editId&&!(num("rate")>0))autoRate(false)});
 curSel.addEventListener("blur",function(){setLabels(false)});
 setLabels(false);
+$("getRate").onclick=function(){autoRate(true)};
 $("amount").oninput=syncFx;
 $("rate").oninput=syncFx;
 $("actual").oninput=syncFx;
@@ -240,7 +272,7 @@ function render(){
 }
 function resetForm(){
   editId=null;photoData="";photoName="";
-  $("amount").value="";$("note").value="";$("rate").value="";$("actual").value="";
+  $("amount").value="";$("note").value="";$("rate").value="";$("actual").value="";$("rateNote").textContent="";
   setCur(localStorage.getItem("expcap_cur")||"USD");
   setPreview();syncFx();
   $("save").textContent="+ Add expense";
