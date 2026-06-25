@@ -147,7 +147,10 @@ function isImg(s){return s && s.indexOf("data:image")===0}
 // ---- currency helpers ----
 function num(id){var v=parseFloat($(id).value);return isFinite(v)?v:0}
 function curUp(){var c=($("cur").value||"USD").trim().toUpperCase();return c||"USD"}
-function setCur(code){code=(code||"USD").toUpperCase();var sel=$("cur");if(![].some.call(sel.options,function(o){return o.value===code})){var o=document.createElement("option");o.value=code;o.textContent=code;sel.appendChild(o)}sel.value=code}
+var CURNAMES={USD:"United States Dollar",EUR:"Euro",GBP:"British Pound",CAD:"Canadian Dollar",MXN:"Mexican Peso",AUD:"Australian Dollar",CHF:"Swiss Franc",JPY:"Japanese Yen",CNY:"Chinese Yuan",NZD:"New Zealand Dollar",SGD:"Singapore Dollar",HKD:"Hong Kong Dollar",INR:"Indian Rupee",BRL:"Brazilian Real",ZAR:"South African Rand",SEK:"Swedish Krona",NOK:"Norwegian Krone",DKK:"Danish Krone",AED:"UAE Dirham",THB:"Thai Baht",KRW:"South Korean Won"};
+// full names while the list is open; just the code once an option is chosen (closed box)
+function setLabels(full){var sel=$("cur");[].forEach.call(sel.options,function(o){var n=CURNAMES[o.value];o.text=(full&&n)?(o.value+" - "+n):o.value})}
+function setCur(code){code=(code||"USD").toUpperCase();var sel=$("cur");if(![].some.call(sel.options,function(o){return o.value===code})){var o=document.createElement("option");o.value=code;o.textContent=code;sel.appendChild(o)}sel.value=code;setLabels(false)}
 function isUSD(){return curUp()==="USD"}
 function estUSDnow(){return isUSD()?num("amount"):num("amount")*num("rate")}
 function syncFx(){
@@ -181,8 +184,13 @@ CATS.forEach(function(c){var b=document.createElement("button");b.className="chi
 var paidEl=$("paid"),selPaid="Cash";
 [].forEach.call(paidEl.children,function(b){b.onclick=function(){selPaid=b.dataset.v;[].forEach.call(paidEl.children,function(x){x.classList.toggle("on",x===b)})}});
 
-// currency field events
-$("cur").onchange=function(){localStorage.setItem("expcap_cur",curUp());syncFx()};
+// currency field events — show full names while open, just the code when closed
+var curSel=$("cur");
+curSel.addEventListener("focus",function(){setLabels(true)});
+curSel.addEventListener("mousedown",function(){setLabels(true)});
+curSel.addEventListener("change",function(){setLabels(false);localStorage.setItem("expcap_cur",curUp());syncFx()});
+curSel.addEventListener("blur",function(){setLabels(false)});
+setLabels(false);
 $("amount").oninput=syncFx;
 $("rate").oninput=syncFx;
 $("actual").oninput=syncFx;
