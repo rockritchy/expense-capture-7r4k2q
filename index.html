@@ -172,32 +172,50 @@ function syncFx(){
   $("fxest").textContent=s;
   $("flag").style.display=(!usd && est>0 && !(act>0))?"block":"none";
 }
-// ---- live FX rates (free, no key: open.er-api.com). Cached so it works briefly offline. ----
-var FXKEY="expcap_fx";
+// ---- live FX rates (free, no key). Historical = Frankfurter (rate on the txn date);
+//      fallback = open.er-api.com (current). Both cached so it works briefly offline. ----
+var FXKEY="expcap_fx";    // current rates cache (USD base)
+var FXHKEY="expcap_fxh";  // historical cache keyed CUR:DATE (rates don't change, cache forever)
 function loadFx(){try{return JSON.parse(localStorage.getItem(FXKEY))||null}catch(e){return null}}
-function getRates(force){
+function loadFxh(){try{return JSON.parse(localStorage.getItem(FXHKEY))||{}}catch(e){return {}}}
+function getCurrent(force){
   var c=loadFx();
   if(c&&c.rates&&!force&&(Date.now()-c.ts<12*3600*1000))return Promise.resolve(c);
   return fetch("https://open.er-api.com/v6/latest/USD",{cache:"no-store"})
     .then(function(r){return r.json()})
     .then(function(j){
-      if(j&&j.result==="success"&&j.rates){var obj={ts:Date.now(),updated:j.time_last_update_utc||"",rates:j.rates};localStorage.setItem(FXKEY,JSON.stringify(obj));return obj}
+      if(j&&j.result==="success"&&j.rates){var o={ts:Date.now(),rates:j.rates};localStorage.setItem(FXKEY,JSON.stringify(o));return o}
       return c||null;
-    })
-    .catch(function(){return c||null});
+    }).catch(function(){return c||null});
 }
+function getHistorical(cur,dateISO){
+  if(!dateISO)return Promise.resolve(null);
+  var store=loadFxh(), key=cur+":"+dateISO;
+  if(store[key])return Promise.resolve(store[key]);
+  return fetch("https://api.frankfurter.dev/v1/"+dateISO+"?base="+cur+"&symbols=USD",{cache:"no-store"})
+    .then(function(r){return r.ok?r.json():null})
+    .then(function(j){
+      if(j&&j.rates&&j.rates.USD>0){var res={usdPer:j.rates.USD,date:j.date};store[key]=res;try{localStorage.setItem(FXHKEY,JSON.stringify(store))}catch(e){}return res}
+      return null;
+    }).catch(function(){return null});
+}
+function showRate(usdPer,label){
+  var rr=Number(usdPer.toPrecision(6));
+  $("rate").value=rr;
+  $("rateNote").textContent="Auto-filled: 1 "+curUp()+" ≈ $"+rr+" "+label+". Adjust if needed; actual USD comes from your statement.";
+  syncFx();
+}
+// transaction-date rate first; fall back to current if no historical for that currency/date
 function autoRate(force){
-  if(isUSD())return;
-  var cur=curUp();
+  if(isUSD())return Promise.resolve();
+  var cur=curUp(), dateISO=$("date").value||todayISO();
   $("rateNote").textContent="Looking up rate…";
-  return getRates(force).then(function(fx){
-    if(!fx||!fx.rates||!fx.rates[cur]){$("rateNote").textContent="Couldn't fetch rate (offline?) — enter it manually.";return}
-    var usdPer=Number((1/fx.rates[cur]).toPrecision(6));
-    $("rate").value=usdPer;
-    var when=fx.updated?fx.updated.replace(" +0000","").replace(/^[A-Za-z]{3}, /,""):"";
-    var stale=(Date.now()-fx.ts>12*3600*1000)?" [cached]":"";
-    $("rateNote").textContent="Auto-filled: 1 "+cur+" ≈ $"+usdPer+(when?(" · rate of "+when):"")+stale+". Adjust if needed; actual USD comes from your statement.";
-    syncFx();
+  return getHistorical(cur,dateISO).then(function(h){
+    if(h&&h.usdPer>0){showRate(h.usdPer,"(rate on "+h.date+")");return}
+    return getCurrent(force).then(function(fx){
+      if(!fx||!fx.rates||!fx.rates[cur]){$("rateNote").textContent="Couldn't fetch rate (offline?) — enter it manually.";return}
+      showRate(1/fx.rates[cur],"(current rate — no historical for "+cur+")");
+    });
   });
 }
 // USD value an entry contributes to the report: actual if present, else estimate
@@ -223,10 +241,12 @@ var paidEl=$("paid"),selPaid="Cash";
 var curSel=$("cur");
 curSel.addEventListener("focus",function(){setLabels(true)});
 curSel.addEventListener("mousedown",function(){setLabels(true)});
-curSel.addEventListener("change",function(){setLabels(false);localStorage.setItem("expcap_cur",curUp());syncFx();if(!isUSD()&&!editId&&!(num("rate")>0))autoRate(false)});
+curSel.addEventListener("change",function(){setLabels(false);localStorage.setItem("expcap_cur",curUp());syncFx();if(!isUSD()&&!editId)autoRate(false)});
 curSel.addEventListener("blur",function(){setLabels(false)});
 setLabels(false);
 $("getRate").onclick=function(){autoRate(true)};
+// re-fetch the date-specific rate if the transaction date changes (new entries only)
+$("date").addEventListener("change",function(){if(!isUSD()&&!editId)autoRate(false)});
 $("amount").oninput=syncFx;
 $("rate").oninput=syncFx;
 $("actual").oninput=syncFx;
