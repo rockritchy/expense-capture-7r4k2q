@@ -23,7 +23,7 @@ textarea{min-height:64px;resize:vertical}
 .amt{font-size:30px;font-weight:700;text-align:center;padding:14px}
 .amtrow{display:flex;gap:10px;align-items:stretch}
 .amtrow .amt{flex:1}
-#cur{width:108px;border:1px solid var(--line);border-radius:10px;text-align:center;font-size:20px;font-weight:700;text-transform:uppercase;color:var(--navy);background:#f7f9fc}
+#cur{width:108px;border:1px solid var(--line);border-radius:10px;text-align:center;text-align-last:center;font-size:20px;font-weight:700;color:var(--navy);background:#f7f9fc;padding:0 8px;-webkit-appearance:menulist;appearance:menulist}
 .fx{display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:6px}
 .fxest{margin-top:10px;font-size:16px;font-weight:700;color:var(--navy)}
 .flag{display:none;background:#fff4e5;border:1px solid #f0c074;color:#9a5b00;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin-top:10px}
@@ -67,14 +67,16 @@ textarea{min-height:64px;resize:vertical}
     <label>Amount &amp; currency</label>
     <div class="amtrow">
       <input class="amt" id="amount" type="number" inputmode="decimal" placeholder="0.00">
-      <input id="cur" list="curlist" value="USD" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Currency code">
+      <select id="cur" aria-label="Currency">
+        <option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+        <option value="CAD">CAD</option><option value="MXN">MXN</option><option value="AUD">AUD</option>
+        <option value="CHF">CHF</option><option value="JPY">JPY</option><option value="CNY">CNY</option>
+        <option value="NZD">NZD</option><option value="SGD">SGD</option><option value="HKD">HKD</option>
+        <option value="INR">INR</option><option value="BRL">BRL</option><option value="ZAR">ZAR</option>
+        <option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option>
+        <option value="AED">AED</option><option value="THB">THB</option><option value="KRW">KRW</option>
+      </select>
     </div>
-    <datalist id="curlist">
-      <option value="USD"></option><option value="EUR"></option><option value="GBP"></option>
-      <option value="CAD"></option><option value="MXN"></option><option value="AUD"></option>
-      <option value="CHF"></option><option value="JPY"></option><option value="CNY"></option>
-      <option value="NZD"></option><option value="SGD"></option><option value="HKD"></option>
-    </datalist>
     <div class="fx" id="fx">
       <label>Conversion rate — 1 <span id="curlbl">USD</span> = ? USD</label>
       <input id="rate" type="number" inputmode="decimal" placeholder="e.g. 1.08">
@@ -145,6 +147,7 @@ function isImg(s){return s && s.indexOf("data:image")===0}
 // ---- currency helpers ----
 function num(id){var v=parseFloat($(id).value);return isFinite(v)?v:0}
 function curUp(){var c=($("cur").value||"USD").trim().toUpperCase();return c||"USD"}
+function setCur(code){code=(code||"USD").toUpperCase();var sel=$("cur");if(![].some.call(sel.options,function(o){return o.value===code})){var o=document.createElement("option");o.value=code;o.textContent=code;sel.appendChild(o)}sel.value=code}
 function isUSD(){return curUp()==="USD"}
 function estUSDnow(){return isUSD()?num("amount"):num("amount")*num("rate")}
 function syncFx(){
@@ -179,7 +182,7 @@ var paidEl=$("paid"),selPaid="Cash";
 [].forEach.call(paidEl.children,function(b){b.onclick=function(){selPaid=b.dataset.v;[].forEach.call(paidEl.children,function(x){x.classList.toggle("on",x===b)})}});
 
 // currency field events
-$("cur").oninput=function(){var p=this.selectionStart;this.value=this.value.toUpperCase();try{this.setSelectionRange(p,p)}catch(e){}localStorage.setItem("expcap_cur",curUp());syncFx()};
+$("cur").onchange=function(){localStorage.setItem("expcap_cur",curUp());syncFx()};
 $("amount").oninput=syncFx;
 $("rate").oninput=syncFx;
 $("actual").oninput=syncFx;
@@ -226,7 +229,7 @@ function render(){
 function resetForm(){
   editId=null;photoData="";photoName="";
   $("amount").value="";$("note").value="";$("rate").value="";$("actual").value="";
-  $("cur").value=localStorage.getItem("expcap_cur")||"USD";
+  setCur(localStorage.getItem("expcap_cur")||"USD");
   setPreview();syncFx();
   $("save").textContent="+ Add expense";
   if(!$("date").value)$("date").value=todayISO();
@@ -234,7 +237,7 @@ function resetForm(){
 function editEntry(e){
   editId=e.id;
   $("amount").value=(e.foreignAmount!=null?e.foreignAmount:e.amount);
-  $("cur").value=e.currency||"USD";
+  setCur(e.currency||"USD");
   $("rate").value=((e.currency&&e.currency!=="USD"&&e.rate)?e.rate:"");
   $("actual").value=(Number(e.actualUSD)>0?e.actualUSD:"");
   $("note").value=e.note||"";$("city").value=e.city||"";$("date").value=e.date;
