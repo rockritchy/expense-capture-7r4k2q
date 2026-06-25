@@ -69,12 +69,16 @@ textarea{min-height:64px;resize:vertical}
       <input class="amt" id="amount" type="number" inputmode="decimal" placeholder="0.00">
       <select id="cur" aria-label="Currency">
         <option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
-        <option value="CAD">CAD</option><option value="MXN">MXN</option><option value="AUD">AUD</option>
-        <option value="CHF">CHF</option><option value="JPY">JPY</option><option value="CNY">CNY</option>
-        <option value="NZD">NZD</option><option value="SGD">SGD</option><option value="HKD">HKD</option>
-        <option value="INR">INR</option><option value="BRL">BRL</option><option value="ZAR">ZAR</option>
-        <option value="SEK">SEK</option><option value="NOK">NOK</option><option value="DKK">DKK</option>
-        <option value="AED">AED</option><option value="THB">THB</option><option value="KRW">KRW</option>
+        <option value="JPY">JPY</option><option value="CNY">CNY</option><option value="HKD">HKD</option>
+        <option value="MOP">MOP</option><option value="TWD">TWD</option><option value="KRW">KRW</option>
+        <option value="MNT">MNT</option><option value="PHP">PHP</option><option value="SGD">SGD</option>
+        <option value="MYR">MYR</option><option value="THB">THB</option><option value="IDR">IDR</option>
+        <option value="VND">VND</option><option value="KHR">KHR</option><option value="LAK">LAK</option>
+        <option value="MMK">MMK</option><option value="BND">BND</option><option value="INR">INR</option>
+        <option value="AUD">AUD</option><option value="NZD">NZD</option><option value="CAD">CAD</option>
+        <option value="MXN">MXN</option><option value="CHF">CHF</option><option value="AED">AED</option>
+        <option value="BRL">BRL</option><option value="ZAR">ZAR</option><option value="SEK">SEK</option>
+        <option value="NOK">NOK</option><option value="DKK">DKK</option>
       </select>
     </div>
     <div class="fx" id="fx">
@@ -147,7 +151,7 @@ function isImg(s){return s && s.indexOf("data:image")===0}
 // ---- currency helpers ----
 function num(id){var v=parseFloat($(id).value);return isFinite(v)?v:0}
 function curUp(){var c=($("cur").value||"USD").trim().toUpperCase();return c||"USD"}
-var CURNAMES={USD:"United States Dollar",EUR:"Euro",GBP:"British Pound",CAD:"Canadian Dollar",MXN:"Mexican Peso",AUD:"Australian Dollar",CHF:"Swiss Franc",JPY:"Japanese Yen",CNY:"Chinese Yuan",NZD:"New Zealand Dollar",SGD:"Singapore Dollar",HKD:"Hong Kong Dollar",INR:"Indian Rupee",BRL:"Brazilian Real",ZAR:"South African Rand",SEK:"Swedish Krona",NOK:"Norwegian Krone",DKK:"Danish Krone",AED:"UAE Dirham",THB:"Thai Baht",KRW:"South Korean Won"};
+var CURNAMES={USD:"United States Dollar",EUR:"Euro",GBP:"British Pound",JPY:"Japanese Yen",CNY:"Chinese Yuan (Renminbi)",HKD:"Hong Kong Dollar",MOP:"Macanese Pataca",TWD:"Taiwan Dollar",KRW:"South Korean Won",MNT:"Mongolian Tugrik",PHP:"Philippine Peso",SGD:"Singapore Dollar",MYR:"Malaysian Ringgit",THB:"Thai Baht",IDR:"Indonesian Rupiah",VND:"Vietnamese Dong",KHR:"Cambodian Riel",LAK:"Lao Kip",MMK:"Myanmar Kyat",BND:"Brunei Dollar",INR:"Indian Rupee",AUD:"Australian Dollar",NZD:"New Zealand Dollar",CAD:"Canadian Dollar",MXN:"Mexican Peso",CHF:"Swiss Franc",AED:"UAE Dirham",BRL:"Brazilian Real",ZAR:"South African Rand",SEK:"Swedish Krona",NOK:"Norwegian Krone",DKK:"Danish Krone"};
 // full names while the list is open; just the code once an option is chosen (closed box)
 function setLabels(full){var sel=$("cur");[].forEach.call(sel.options,function(o){var n=CURNAMES[o.value];o.text=(full&&n)?(o.value+" - "+n):o.value})}
 function setCur(code){code=(code||"USD").toUpperCase();var sel=$("cur");if(![].some.call(sel.options,function(o){return o.value===code})){var o=document.createElement("option");o.value=code;o.textContent=code;sel.appendChild(o)}sel.value=code;setLabels(false)}
