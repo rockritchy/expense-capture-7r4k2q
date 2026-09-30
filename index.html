@@ -38,9 +38,11 @@ textarea{min-height:64px;resize:vertical}
 .toggle button.on{background:var(--navy);border-color:var(--navy);color:#fff}
 .cap{display:flex;gap:8px}
 .cap button{flex:1;border:1.5px solid #b9c2cf;background:#f7f9fc;border-radius:12px;padding:14px 6px;font-size:14px;font-weight:600;color:var(--navy)}
-.preview-row{display:flex;gap:12px;align-items:center;margin-top:10px;min-height:0}
-#prev{display:none;width:74px;height:74px;border-radius:10px;object-fit:cover;border:1px solid var(--line)}
-#fileChip{display:none;align-items:center;gap:6px;background:#eef1f5;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;color:#333;font-weight:600}
+.previews{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.att{position:relative;width:74px;height:74px;border-radius:10px;border:1px solid var(--line);overflow:hidden;background:#eef1f5;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;font-weight:600;color:#556;padding:4px;word-break:break-word}
+.att img{width:100%;height:100%;object-fit:cover}
+.att .x{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.count{display:inline-block;background:#eef1f5;border:1px solid var(--line);color:#556;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .add{position:fixed;left:0;right:0;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(242,243,245,0),var(--bg) 28%)}
 .add .max{max-width:560px;margin:0 auto;display:flex;gap:10px}
 .btn{flex:1;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;color:#fff;background:var(--navy)}
@@ -102,18 +104,16 @@ textarea{min-height:64px;resize:vertical}
     </div>
     <label>What was it? (who, if a meal)</label>
     <textarea id="note" placeholder="e.g. Dinner w/ Ty Jessup (Highline) — Blackwall Hitch"></textarea>
-    <label>Receipt — photo, library, or file (PDF/scan)</label>
+    <label>Receipts — add photos and/or files (add as many as you need: e.g. receipt + bank statement)</label>
     <div class="cap">
       <button id="bCam">📷 Take photo</button>
       <button id="bLib">🖼 Library</button>
       <button id="bDoc">📄 Add file</button>
     </div>
-    <div class="preview-row">
-      <img id="prev"><span id="fileChip"></span>
-    </div>
+    <div class="previews" id="previews"></div>
     <input id="fCam" type="file" accept="image/*" capture="environment" hidden>
-    <input id="fLib" type="file" accept="image/*" hidden>
-    <input id="fDoc" type="file" accept="application/pdf,image/*" hidden>
+    <input id="fLib" type="file" accept="image/*" multiple hidden>
+    <input id="fDoc" type="file" accept="application/pdf,image/*" multiple hidden>
     <label>City &amp; state · Date</label>
     <div style="display:flex;gap:10px">
       <input id="city" type="text" placeholder="City, ST" style="flex:1">
@@ -133,7 +133,7 @@ textarea{min-height:64px;resize:vertical}
       <button id="mail">✉︎ Email summary</button>
       <button id="clear">🗑 Clear all</button>
     </div>
-    <div class="muted">Saved on this phone automatically. For non-USD spend, enter the currency + a rough rate to get an estimate now, then add the exact USD from your statement later. Export drops a file (with photos/receipts) you can save to OneDrive or email — then Claude turns it into your form.</div>
+    <div class="muted">Saved on this phone automatically. For non-USD spend, enter the currency + a rough rate to get an estimate now, then add the exact USD from your statement later. Attach as many receipts/files per expense as you like (e.g. receipt + bank statement). Export drops a file (with photos/receipts) you can save to OneDrive or email — then Claude turns it into your form.</div>
   </div>
 </div>
 <div class="add"><div class="max">
@@ -144,13 +144,17 @@ textarea{min-height:64px;resize:vertical}
 <script>
 var CATS=["Breakfast","Lunch","Dinner","Entertainment","Uber/Taxi","Hotel","Airfare","Parking","Gas","Tolls","Mileage","Other"];
 var KEY="expcap_v1";
-var state={trip:"",entries:[]}, editId=null, photoData="", photoName="";
+var state={trip:"",entries:[]}, editId=null, attachments=[];
 function load(){try{var s=JSON.parse(localStorage.getItem(KEY));if(s){state=s}}catch(e){}}
 function save(){localStorage.setItem(KEY,JSON.stringify(state))}
 function money(n){return "$"+(Number(n)||0).toFixed(2)}
 function todayISO(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)}
 var $=function(id){return document.getElementById(id)};
 function isImg(s){return s && s.indexOf("data:image")===0}
+// attachments helpers (backward compatible with old single-photo entries)
+function attsOf(e){if(e.attachments&&e.attachments.length)return e.attachments;if(e.photo)return [{data:e.photo,name:e.photoName||""}];return []}
+function firstAtt(e){var a=attsOf(e);return a.length?a[0]:null}
+function attCount(e){return attsOf(e).length}
 
 // ---- currency helpers ----
 function num(id){var v=parseFloat($(id).value);return isFinite(v)?v:0}
@@ -252,27 +256,32 @@ $("amount").oninput=syncFx;
 $("rate").oninput=syncFx;
 $("actual").oninput=syncFx;
 
-function setPreview(){
-  var p=$("prev"),chip=$("fileChip");
-  if(isImg(photoData)){p.src=photoData;p.style.display="block";chip.style.display="none"}
-  else if(photoData){p.style.display="none";chip.style.display="inline-flex";chip.textContent="📄 "+(photoName||"file")+"   ✕"}
-  else {p.style.display="none";chip.style.display="none"}
+// ---- attachments: add (don't replace), preview grid, per-item remove ----
+function renderAttachments(){
+  var box=$("previews");box.innerHTML="";
+  attachments.forEach(function(a,i){
+    var d=document.createElement("div");d.className="att";
+    if(isImg(a.data)){d.innerHTML='<img src="'+a.data+'">'}
+    else{d.textContent="📄 "+(a.name||"file")}
+    var x=document.createElement("button");x.className="x";x.type="button";x.innerHTML="&times;";
+    x.onclick=function(){attachments.splice(i,1);renderAttachments()};
+    d.appendChild(x);box.appendChild(d);
+  });
 }
-$("fileChip").onclick=function(){photoData="";photoName="";setPreview()};
-$("prev").onclick=function(){if(confirm("Remove this attachment?")){photoData="";photoName="";setPreview()}};
+function handleFiles(files){[].forEach.call(files,function(f){handleFile(f)})}
 function handleFile(f){
-  if(!f)return; photoName=f.name||"";
+  if(!f)return; var nm=f.name||"";
   var r=new FileReader();
-  if(f.type==="application/pdf"){r.onload=function(){photoData=r.result;photoName=photoName||"scan.pdf";setPreview()};r.readAsDataURL(f);return}
-  r.onload=function(){var img=new Image();img.onload=function(){var m=1400,w=img.width,h=img.height;if(w>m||h>m){if(w>h){h=Math.round(h*m/w);w=m}else{w=Math.round(w*m/h);h=m}}var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);photoData=c.toDataURL("image/jpeg",0.7);photoName=photoName||"photo.jpg";setPreview()};img.src=r.result};
+  if(f.type==="application/pdf"){r.onload=function(){attachments.push({data:r.result,name:nm||"scan.pdf"});renderAttachments()};r.readAsDataURL(f);return}
+  r.onload=function(){var img=new Image();img.onload=function(){var m=1400,w=img.width,h=img.height;if(w>m||h>m){if(w>h){h=Math.round(h*m/w);w=m}else{w=Math.round(w*m/h);h=m}}var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);attachments.push({data:c.toDataURL("image/jpeg",0.7),name:nm||"photo.jpg"});renderAttachments()};img.src=r.result};
   r.readAsDataURL(f)
 }
 $("bCam").onclick=function(){$("fCam").click()};
 $("bLib").onclick=function(){$("fLib").click()};
 $("bDoc").onclick=function(){$("fDoc").click()};
-$("fCam").onchange=function(e){handleFile(e.target.files[0]);e.target.value=""};
-$("fLib").onchange=function(e){handleFile(e.target.files[0]);e.target.value=""};
-$("fDoc").onchange=function(e){handleFile(e.target.files[0]);e.target.value=""};
+$("fCam").onchange=function(e){handleFiles(e.target.files);e.target.value=""};
+$("fLib").onchange=function(e){handleFiles(e.target.files);e.target.value=""};
+$("fDoc").onchange=function(e){handleFiles(e.target.files);e.target.value=""};
 
 function render(){
   $("trip").value=state.trip||"";
@@ -283,19 +292,21 @@ function render(){
   if(!state.entries.length){box.innerHTML='<div class="empty">No expenses yet — add your first above.</div>';return}
   state.entries.slice().reverse().forEach(function(e){
     var d=document.createElement("div");d.className="item";
-    var thumb=isImg(e.photo)?('<img src="'+e.photo+'">'):('<div class="ph">'+(e.photo?'📄':'🧾')+'</div>');
+    var fa=firstAtt(e),n=attCount(e);
+    var thumb=(fa&&isImg(fa.data))?('<img src="'+fa.data+'">'):('<div class="ph">'+(fa?'📄':'🧾')+'</div>');
     var est=isEstOnly(e)?'<span class="badge">EST</span>':'';
-    d.innerHTML=thumb+'<div class="mid"><div class="a">'+fxText(e)+' · '+e.category+est+'</div><div class="m">'+(e.note||"")+'</div><div class="m">'+e.date+(e.city?(" · "+e.city):"")+" · "+e.paid+'</div></div><button class="del">&times;</button>';
+    var cnt=n>1?('<span class="count">📎'+n+'</span>'):'';
+    d.innerHTML=thumb+'<div class="mid"><div class="a">'+fxText(e)+' · '+e.category+est+cnt+'</div><div class="m">'+(e.note||"")+'</div><div class="m">'+e.date+(e.city?(" · "+e.city):"")+" · "+e.paid+'</div></div><button class="del">&times;</button>';
     d.querySelector(".del").onclick=function(ev){ev.stopPropagation();if(confirm("Delete this expense?")){state.entries=state.entries.filter(function(x){return x.id!==e.id});save();render()}};
     d.onclick=function(){editEntry(e)};
     box.appendChild(d)
   })
 }
 function resetForm(){
-  editId=null;photoData="";photoName="";
+  editId=null;attachments=[];
   $("amount").value="";$("note").value="";$("rate").value="";$("actual").value="";$("rateNote").textContent="";
   setCur(localStorage.getItem("expcap_cur")||"USD");
-  setPreview();syncFx();
+  renderAttachments();syncFx();
   $("save").textContent="+ Add expense";
   if(!$("date").value)$("date").value=todayISO();
 }
@@ -308,7 +319,7 @@ function editEntry(e){
   $("note").value=e.note||"";$("city").value=e.city||"";$("date").value=e.date;
   selCat=e.category;[].forEach.call(chipsEl.children,function(x){x.classList.toggle("on",x.textContent===e.category)});
   selPaid=e.paid;[].forEach.call(paidEl.children,function(x){x.classList.toggle("on",x.dataset.v===e.paid)});
-  photoData=e.photo||"";photoName=e.photoName||"";setPreview();syncFx();
+  attachments=attsOf(e).map(function(a){return {data:a.data,name:a.name}});renderAttachments();syncFx();
   $("save").textContent="✓ Update expense";window.scrollTo(0,0);
 }
 
@@ -327,7 +338,8 @@ $("save").onclick=function(){
     currency:cur, foreignAmount:+amt.toFixed(2),
     rate:usd?1:(rate>0?rate:""), estUSD:+(est||0).toFixed(2),
     actualUSD:actual>0?+actual.toFixed(2):"",
-    paid:selPaid,note:$("note").value.trim(),photo:photoData,photoName:photoName
+    paid:selPaid,note:$("note").value.trim(),
+    attachments:attachments.map(function(a){return {data:a.data,name:a.name}})
   };
   if(editId){state.entries=state.entries.map(function(x){return x.id===editId?rec:x})}else{state.entries.push(rec)}
   // auto-suggest trip name from the first item; never overwrite a typed name
@@ -358,7 +370,8 @@ $("mail").onclick=function(){
   if(!state.entries.length){alert("Nothing to export yet.");return}
   var o=exportObj(),lines=o.entries.map(function(e){
     var amt=(e.currency&&e.currency!=="USD")?(fxText(e)):money(usdOf(e));
-    return "• "+e.date+"  "+amt+"  "+e.category+(e.paid==="Company Card"?" [card]":"")+(isEstOnly(e)?" [EST — needs actual USD]":"")+"  — "+(e.note||"")+(e.city?(" ("+e.city+")"):"");
+    var na=attCount(e);
+    return "• "+e.date+"  "+amt+"  "+e.category+(e.paid==="Company Card"?" [card]":"")+(isEstOnly(e)?" [EST — needs actual USD]":"")+(na>1?(" ["+na+" files]"):"")+"  — "+(e.note||"")+(e.city?(" ("+e.city+")"):"");
   }).join("\n");
   var warn=o.estimatedOnly?("\n⚠ "+o.estimatedOnly+" item(s) are estimated only — enter actual USD from the statement before finalizing.\n"):"";
   var body="Trip: "+o.trip+"\nTotal (USD): "+money(o.total)+" ("+o.count+" items)\n"+warn+"\n"+lines+"\n\n(Receipts/photos are in the app — use Send/Export to include them.)";
