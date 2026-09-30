@@ -43,6 +43,13 @@ textarea{min-height:64px;resize:vertical}
 .att img{width:100%;height:100%;object-fit:cover}
 .att .x{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
 .count{display:inline-block;background:#eef1f5;border:1px solid var(--line);color:#556;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
+.storebar{height:6px;border-radius:999px;background:#e3e3e8;overflow:hidden;margin:0 0 6px}
+.storebar>div{height:100%;width:0;background:var(--navy);transition:width .25s}
+.storebar.warn>div{background:#e0a100}
+.storebar.crit>div{background:#c0392b}
+.storenote{font-size:12px;color:var(--grey);text-align:center;margin-bottom:8px}
+.storenote.warn{color:#9a6b00;font-weight:600}
+.storenote.crit{color:#c0392b;font-weight:700}
 .add{position:fixed;left:0;right:0;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(242,243,245,0),var(--bg) 28%)}
 .add .max{max-width:560px;margin:0 auto;display:flex;gap:10px}
 .btn{flex:1;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:700;color:#fff;background:var(--navy)}
@@ -133,6 +140,8 @@ textarea{min-height:64px;resize:vertical}
       <button id="mail">✉︎ Email summary</button>
       <button id="clear">🗑 Clear all</button>
     </div>
+    <div class="storebar" id="storeBar"><div id="storeFill"></div></div>
+    <div class="storenote" id="storeNote"></div>
     <div class="muted">Saved on this phone automatically. For non-USD spend, enter the currency + a rough rate to get an estimate now, then add the exact USD from your statement later. Attach as many receipts/files per expense as you like (e.g. receipt + bank statement). Export drops a file (with photos/receipts) you can save to OneDrive or email — then Claude turns it into your form.</div>
   </div>
 </div>
@@ -146,7 +155,22 @@ var CATS=["Breakfast","Lunch","Dinner","Entertainment","Uber/Taxi","Hotel","Airf
 var KEY="expcap_v1";
 var state={trip:"",entries:[]}, editId=null, attachments=[];
 function load(){try{var s=JSON.parse(localStorage.getItem(KEY));if(s){state=s}}catch(e){}}
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(e){return false}}
+// ---- storage meter (localStorage is ~5 MB per site; warn before it fills) ----
+var BUDGET=5000000; // ~5 MB typical cap (Safari/iOS)
+function usedBytes(){try{return JSON.stringify(state).length*2}catch(e){return 0}} // UTF-16 accounting
+function fmtMB(b){return (b/1048576).toFixed(1)+" MB"}
+function updateStorage(){
+  var bar=$("storeBar"),fill=$("storeFill"),note=$("storeNote");
+  if(!bar)return;
+  var used=usedBytes(),pct=Math.min(100,Math.round(used/BUDGET*100));
+  fill.style.width=pct+"%";
+  var msg="Storage: "+fmtMB(used)+" of ~"+fmtMB(BUDGET)+" ("+pct+"%)";
+  if(pct>=90){bar.className="storebar crit";note.className="storenote crit";msg="⚠ Storage almost full ("+pct+"%) — tap Send / Export now, then Clear all to start a new trip.";}
+  else if(pct>=75){bar.className="storebar warn";note.className="storenote warn";msg="Storage getting full ("+pct+"%) — export soon and start a fresh trip.";}
+  else{bar.className="storebar";note.className="storenote";}
+  note.textContent=msg;
+}
 function money(n){return "$"+(Number(n)||0).toFixed(2)}
 function todayISO(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)}
 var $=function(id){return document.getElementById(id)};
@@ -288,6 +312,7 @@ function render(){
   var t=state.entries.reduce(function(a,e){return a+usdOf(e)},0);
   var nEst=state.entries.filter(isEstOnly).length;
   $("tot").textContent=money(t)+" · "+state.entries.length+(nEst?(" · "+nEst+"⚠"):"");
+  updateStorage();
   var box=$("items");box.innerHTML="";
   if(!state.entries.length){box.innerHTML='<div class="empty">No expenses yet — add your first above.</div>';return}
   state.entries.slice().reverse().forEach(function(e){
@@ -348,7 +373,8 @@ $("save").onclick=function(){
     state.trip=(rec.city?rec.city.split(",")[0]+" — ":"")+mon+(rec.city?"":" Trip");
     $("trip").value=state.trip;
   }
-  save();resetForm();render()
+  var okSaved=save();resetForm();render();
+  if(!okSaved){alert("This phone's storage is full — this expense may not survive a refresh. Tap “Send / Export” now to save everything to a file, then use 🗑 Clear all to start a fresh trip.");}
 };
 $("reset").onclick=resetForm;
 $("trip").oninput=function(){state.trip=$("trip").value;save()};
